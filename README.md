@@ -32,26 +32,8 @@ P2/
 - **SHAP Explainability** — Feature importance and individual prediction explanations
 - **Interactive Dashboard** — Filterable visualizations built with Plotly and Streamlit
 
-## Getting Started
-
-### Prerequisites
-
-- Python 3.9+
-
-### Installation
-
-```bash
-cd pan_attrition_app
-pip install -r requirements.txt
-```
-
-### Run the App
-
-```bash
-streamlit run app.py
-```
-
-Open [http://localhost:8501](http://localhost:8501) in your browser.
+## Streamlit Dashboard
+-https://pan-attrition-app-oadspf3hy6uek2dksvy4dm.streamlit.app/
 
 ## Dataset
 
