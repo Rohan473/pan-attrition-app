@@ -6,23 +6,6 @@ A machine learning–based employee attrition prediction and risk scoring system
 
 This project trains and compares multiple classification models (Logistic Regression, Random Forest, Gradient Boosting, XGBoost) on Palo Alto Networks HR data, applies SMOTE to address class imbalance, and surfaces results through an interactive dashboard with SHAP-based explainability.
 
-## Project Structure
-
-```
-P2/
-├── README.md
-├── PRD.md                         # Product requirements document
-├── executive_summary.md           # Executive summary
-├── research_paper.tex             # LaTeX research paper
-├── pan_attrition_app/
-│   ├── app.py                     # Main Streamlit application
-│   ├── Palo_Alto_Networks.csv     # HR dataset
-│   └── requirements.txt           # Python dependencies
-└── main/
-    ├── app.py                     # Alternate entry point
-    ├── Palo_Alto_Networks.csv
-    └── requirements.txt
-```
 
 ## Features
 
