@@ -173,7 +173,7 @@ with st.sidebar:
 # PAGE 1 — EXECUTIVE DASHBOARD
 # ═══════════════════════════════════════════════════════════════════════════════
 if page == "📊 Executive Dashboard":
-    st.markdown("# 📊 Attrition Risk Dashboard")
+    st.markdown("# Machine Learning–Based Employee Attrition Prediction and Risk Scoring System")
     st.markdown("*Predictive workforce intelligence for Palo Alto Networks HR leadership*")
 
     # KPI row
