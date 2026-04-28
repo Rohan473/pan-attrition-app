@@ -219,11 +219,13 @@ def train_models(X_scaled, y):
 
 
 @st.cache_data
-def compute_employee_predictions(X_scaled, best_model):
+def compute_employee_predictions(X_scaled):
     """
     Compute attrition probabilities for all employees.
     Cached to avoid recomputation on page switches.
+    Note: best_model is obtained from st.session_state to avoid hashing issues.
     """
+    best_model = st.session_state.best_model
     return best_model.predict_proba(X_scaled)[:, 1]
 
 
@@ -258,8 +260,14 @@ with st.spinner("Training ML models — please wait…"):
 best_model_name = max(model_results, key=lambda k: model_results[k]["roc_auc"])
 best_model      = model_results[best_model_name]["model"]
 
+# Store in session_state to avoid hashing issues with cache
+st.session_state.best_model = best_model
+st.session_state.model_results = model_results
+st.session_state.feature_names = feature_names
+st.session_state.scaler = scaler
+
 # Full-dataset predictions for the risk dashboard
-all_probs = compute_employee_predictions(X_scaled, best_model)
+all_probs = compute_employee_predictions(X_scaled)
 df["AttritionProbability"] = all_probs
 df["RiskCategory"] = df["AttritionProbability"].apply(lambda p: assign_risk(p)[0])
 df["RiskIcon"]     = df["AttritionProbability"].apply(lambda p: assign_risk(p)[1])
@@ -286,6 +294,7 @@ with st.sidebar:
 # PAGE 1 — EXECUTIVE DASHBOARD
 # ═══════════════════════════════════════════════════════════════════════════════
 if page == "📊 Executive Dashboard":
+    best_model = st.session_state.best_model
     st.markdown("# Machine Learning–Based Employee Attrition Prediction and Risk Scoring System")
     st.markdown("*Predictive workforce intelligence for Palo Alto Networks HR leadership*")
 
@@ -503,6 +512,8 @@ elif page == "🏢 Department Analytics":
 # ═══════════════════════════════════════════════════════════════════════════════
 elif page == "🤖 Model Performance":
     st.markdown("# 🤖 Model Performance Comparison")
+    
+    model_results = st.session_state.model_results
 
     # Metrics table
     metrics_df = pd.DataFrame([{
@@ -576,6 +587,9 @@ elif page == "🤖 Model Performance":
 # ═══════════════════════════════════════════════════════════════════════════════
 elif page == "🔬 Feature Explainability":
     st.markdown("# 🔬 Feature Explainability")
+    
+    model_results = st.session_state.model_results
+    feature_names = st.session_state.feature_names
 
     # Feature importance from Random Forest (always available)
     rf_model = model_results["Random Forest"]["model"]
@@ -608,7 +622,7 @@ elif page == "🔬 Feature Explainability":
     st.markdown("---")
     st.markdown("### 🧠 SHAP Value Analysis (XGBoost)")
     with st.spinner("Computing SHAP values…"):
-        xgb_model = model_results["XGBoost"]["model"]
+        xgb_model = st.session_state.model_results["XGBoost"]["model"]
         shap_values, X_sample = compute_shap_values(xgb_model, X_scaled, sample_size=200)
 
         shap_df = pd.DataFrame(np.abs(shap_values), columns=feature_names)
@@ -636,6 +650,10 @@ elif page == "🔬 Feature Explainability":
 elif page == "🎛️ What-If Simulator":
     st.markdown("# 🎛️ What-If Scenario Simulator")
     st.markdown("Adjust employee attributes to explore how interventions affect attrition risk.")
+    
+    best_model = st.session_state.best_model
+    scaler = st.session_state.scaler
+    feature_names = st.session_state.feature_names
 
     col_inp, col_res = st.columns([1,1])
 
