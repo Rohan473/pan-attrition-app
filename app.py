@@ -72,6 +72,10 @@ DROP_FEATURES = ["DailyRate", "HourlyRate", "MonthlyRate"]
 
 @st.cache_data
 def load_and_preprocess():
+    """
+    Load CSV and perform feature engineering & preprocessing.
+    Cached to avoid reloading on every rerun.
+    """
     df = pd.read_csv("Palo_Alto_Networks.csv")
 
     # --- feature engineering ---
@@ -102,6 +106,7 @@ def load_and_preprocess():
 
     return df, X_scaled, y, scaler, X.columns.tolist()
 
+
 CACHE_DIR = os.path.join(os.path.dirname(__file__), ".model_cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
@@ -113,14 +118,22 @@ def _data_fingerprint(X_scaled, y):
 
 @st.cache_resource
 def train_models(X_scaled, y):
+    """
+    Train all ML models with hyperparameter tuning.
+    Cached as a resource to persist model objects across reruns.
+    Uses disk cache as fallback to avoid retraining on app restart.
+    """
     cache_key = _data_fingerprint(X_scaled, y)
     cache_file = os.path.join(CACHE_DIR, f"models_{cache_key}.joblib")
 
     # ── Fast path: load from disk if already trained ──
     if os.path.exists(cache_file):
+        st.info("✓ Loaded models from cache")
         return joblib.load(cache_file)
 
     # ── Slow path: train + tune, then persist ──
+    st.info("🔄 Training models (this may take a minute on first run)…")
+    
     X_train, X_test, y_train, y_test = train_test_split(
         X_scaled, y, test_size=0.2, random_state=42, stratify=y)
 
@@ -166,7 +179,10 @@ def train_models(X_scaled, y):
     X_res, y_res = sm.fit_resample(X_train, y_train)
 
     results = {}
-    for name, base_mdl in base_models.items():
+    progress_bar = st.progress(0)
+    for idx, (name, base_mdl) in enumerate(base_models.items()):
+        st.status(f"Training {name}…", state="running")
+        
         search = RandomizedSearchCV(
             base_mdl, param_grids[name],
             n_iter=min(20, len(param_grids[name])),
@@ -194,17 +210,46 @@ def train_models(X_scaled, y):
             "cv_mean":     cv_scores.mean(),
             "cv_std":      cv_scores.std(),
         }
+        progress_bar.progress((idx + 1) / len(base_models))
 
     output = (results, X_test, y_test)
     joblib.dump(output, cache_file)
+    st.success(f"✅ Models trained and cached to {cache_file}")
     return output
 
+
+@st.cache_data
+def compute_employee_predictions(X_scaled, best_model):
+    """
+    Compute attrition probabilities for all employees.
+    Cached to avoid recomputation on page switches.
+    """
+    return best_model.predict_proba(X_scaled)[:, 1]
+
+
+@st.cache_data
+def compute_shap_values(xgb_model, X_scaled, sample_size=200):
+    """
+    Compute SHAP values for explainability.
+    Cached to avoid recomputation when switching pages.
+    """
+    sample_idx = np.random.choice(len(X_scaled), size=min(sample_size, len(X_scaled)), replace=False)
+    X_sample = X_scaled.iloc[sample_idx]
+    
+    explainer = shap.TreeExplainer(xgb_model)
+    shap_values = explainer.shap_values(X_sample)
+    
+    return shap_values, X_sample
+
+
 def assign_risk(prob):
+    """Classify attrition probability into risk categories."""
     if prob >= 0.60: return "High Risk",   "🔴"
     if prob >= 0.30: return "Medium Risk", "🟡"
     return "Low Risk", "🟢"
 
-# ─── Load Data ─────────────────────────────────────────────────────────────────
+
+# ─── Load Data & Train Models ──────────────────────────────────────────────────
 df, X_scaled, y, scaler, feature_names = load_and_preprocess()
 
 with st.spinner("Training ML models — please wait…"):
@@ -214,7 +259,7 @@ best_model_name = max(model_results, key=lambda k: model_results[k]["roc_auc"])
 best_model      = model_results[best_model_name]["model"]
 
 # Full-dataset predictions for the risk dashboard
-all_probs = best_model.predict_proba(X_scaled)[:, 1]
+all_probs = compute_employee_predictions(X_scaled, best_model)
 df["AttritionProbability"] = all_probs
 df["RiskCategory"] = df["AttritionProbability"].apply(lambda p: assign_risk(p)[0])
 df["RiskIcon"]     = df["AttritionProbability"].apply(lambda p: assign_risk(p)[1])
@@ -563,12 +608,8 @@ elif page == "🔬 Feature Explainability":
     st.markdown("---")
     st.markdown("### 🧠 SHAP Value Analysis (XGBoost)")
     with st.spinner("Computing SHAP values…"):
-        xgb_model  = model_results["XGBoost"]["model"]
-        sample_idx = np.random.choice(len(X_scaled), size=min(200, len(X_scaled)), replace=False)
-        X_sample   = X_scaled.iloc[sample_idx]
-
-        explainer   = shap.TreeExplainer(xgb_model)
-        shap_values = explainer.shap_values(X_sample)
+        xgb_model = model_results["XGBoost"]["model"]
+        shap_values, X_sample = compute_shap_values(xgb_model, X_scaled, sample_size=200)
 
         shap_df = pd.DataFrame(np.abs(shap_values), columns=feature_names)
         mean_shap = shap_df.mean().nlargest(15).sort_values()
